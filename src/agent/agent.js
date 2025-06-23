@@ -16,52 +16,56 @@ import settings from '../../settings.js';
 import { serverProxy } from './agent_proxy.js';
 import { Task } from './tasks.js';
 import { say } from './speak.js';
+import { createBridgeMessage } from '../../bridge_message_format.js';
+import * as world from './library/world.js';
+import * as mc from '../utils/mcdata.js'; 
 
 export class Agent {
-    async start(profile_fp, load_mem=false, init_message=null, count_id=0, task_path=null, task_id=null) {
-        this.last_sender = null;
-        this.count_id = count_id;
-        if (!profile_fp) {
-            throw new Error('No profile filepath provided');
-        }
-        
-        console.log('Starting agent initialization with profile:', profile_fp);
-        
-        // Initialize components with more detailed error handling
-        console.log('Initializing action manager...');
-        this.actions = new ActionManager(this);
-        console.log('Initializing prompter...');
-        this.prompter = new Prompter(this, profile_fp);
-        this.name = this.prompter.getName();
-        console.log('Initializing history...');
-        this.history = new History(this);
-        console.log('Initializing coder...');
-        this.coder = new Coder(this);
-        console.log('Initializing npc controller...');
-        this.npc = new NPCContoller(this);
-        console.log('Initializing memory bank...');
-        this.memory_bank = new MemoryBank();
-        console.log('Initializing self prompter...');
-        this.self_prompter = new SelfPrompter(this);
-        convoManager.initAgent(this);            
-        console.log('Initializing examples...');
-        await this.prompter.initExamples();
-        console.log('Initializing task...');
-        this.task = new Task(this, task_path, task_id);
-        const blocked_actions = settings.blocked_actions.concat(this.task.blocked_actions || []);
-        blacklistCommands(blocked_actions);
+    async start(profile_fp, load_mem=false, init_message=null, count_id=0, task_path=null, task_id=null, connectBridgeServer=null) {
+            this.connectBridgeServer = connectBridgeServer;
+            this.last_sender = null;
+            this.count_id = count_id;
+            if (!profile_fp) {
+                throw new Error('No profile filepath provided');
+            }
+            
+            console.log('Starting agent initialization with profile:', profile_fp);
+            
+            // Initialize components with more detailed error handling
+            console.log('Initializing action manager...');
+            this.actions = new ActionManager(this);
+            console.log('Initializing prompter...');
+            this.prompter = new Prompter(this, profile_fp);
+            this.name = this.prompter.getName();
+            console.log('Initializing history...');
+            this.history = new History(this);
+            console.log('Initializing coder...');
+            this.coder = new Coder(this);
+            console.log('Initializing npc controller...');
+            this.npc = new NPCContoller(this);
+            console.log('Initializing memory bank...');
+            this.memory_bank = new MemoryBank();
+            console.log('Initializing self prompter...');
+            this.self_prompter = new SelfPrompter(this);
+            convoManager.initAgent(this);            
+            console.log('Initializing examples...');
+            await this.prompter.initExamples();
+            console.log('Initializing task...');
+            this.task = new Task(this, task_path, task_id);
+            const blocked_actions = settings.blocked_actions.concat(this.task.blocked_actions || []);
+            blacklistCommands(blocked_actions);
 
-        serverProxy.connect(this);
+            serverProxy.connect(this);
 
-        console.log(this.name, 'logging into minecraft...');
-        this.bot = initBot(this.name);
+            console.log(this.name, 'logging into minecraft...');
+            this.bot = initBot(this.name);
 
-        initModes(this);
+            initModes(this);
 
-        let save_data = null;
-        if (load_mem) {
-            save_data = this.history.load();
-        }
+            let save_data = null;
+            if (load_mem) {
+                save_data = this.history.load();
+            }
 
         this.bot.on('login', () => {
             console.log(this.name, 'logged in!');
@@ -73,37 +77,37 @@ export class Agent {
                 this.bot.chat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
             else
                 this.bot.chat(`/skin clear`);
-        });
+            });
 
-        const spawnTimeout = setTimeout(() => {
-            process.exit(0);
-        }, 30000);
-        this.bot.once('spawn', async () => {
-            try {
-                clearTimeout(spawnTimeout);
-                addBrowserViewer(this.bot, count_id);
+            const spawnTimeout = setTimeout(() => {
+                 process.exit(0);
+            }, 30000);
+            this.bot.once('spawn', async () => {
+                try {
+                    clearTimeout(spawnTimeout);
+                    addBrowserViewer(this.bot, count_id);
 
-                // wait for a bit so stats are not undefined
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                
-                console.log(`${this.name} spawned.`);
-                this.clearBotLogs();
+                    // wait for a bit so stats are not undefined
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    
+                    console.log(`${this.name} spawned.`);
+                    this.clearBotLogs();
 
-                this._setupEventHandlers(save_data, init_message);
-                this.startEvents();
+                    this._setupEventHandlers(save_data, init_message);
+                    this.startEvents();
 
-                if (!load_mem) {
-                    this.task.initBotTask();
-                }
+                    if (!load_mem) {
+                        this.task.initBotTask();
+                    }
 
-                console.log('Initializing vision intepreter...');
-                this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+                    console.log('Initializing vision intepreter...');
+                    this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
 
-            } catch (error) {
+                } catch (error) {
                 console.error('Error in spawn event:', error);
                 process.exit(0);
-            }
-        });
+                }
+            });
     }
 
     async _setupEventHandlers(save_data, init_message) {
@@ -336,6 +340,12 @@ export class Agent {
             this.openChat(message);
             // note that to_player could be another bot, but if we get here the conversation has ended
         }
+
+        const bridgeMessage = createBridgeMessage('Chat response', 'chat', {
+            message: message,
+            to: to_player,
+        });
+        this.connectBridgeServer.sendMessage(bridgeMessage);
     }
 
     async openChat(message) {
@@ -367,42 +377,49 @@ export class Agent {
     startEvents() {
         // Custom events
         this.bot.on('time', () => {
-            if (this.bot.time.timeOfDay == 0)
-            this.bot.emit('sunrise');
-            else if (this.bot.time.timeOfDay == 6000)
-            this.bot.emit('noon');
-            else if (this.bot.time.timeOfDay == 12000)
-            this.bot.emit('sunset');
-            else if (this.bot.time.timeOfDay == 18000)
-            this.bot.emit('midnight');
+            const eventName = this.bot.time.timeOfDay == 0 ? 'sunrise' :
+                              this.bot.time.timeOfDay == 6000 ? 'noon' :
+                              this.bot.time.timeOfDay == 12000 ? 'sunset' :
+                              this.bot.time.timeOfDay == 18000 ? 'midnight' : null;
+            if (eventName) {
+                const message = createBridgeMessage('Time event triggered', "time", {
+                    time: eventName 
+                });
+                this.connectBridgeServer.sendMessage(message);
+            }
         });
 
         let prev_health = this.bot.health;
         this.bot.lastDamageTime = 0;
         this.bot.lastDamageTaken = 0;
         this.bot.on('health', () => {
-            if (this.bot.health < prev_health) {
-                this.bot.lastDamageTime = Date.now();
-                this.bot.lastDamageTaken = prev_health - this.bot.health;
+            const healthChange = prev_health - this.bot.health;
+            const MAJOR_HEALTH_DECREASE = 20; // Define what constitutes a major decrease
+            if (healthChange >= MAJOR_HEALTH_DECREASE) {
+            const message = createBridgeMessage('Major health decrease', 'health', {
+                 health: this.bot.health, damageTaken: healthChange 
+            });
+            this.connectBridgeServer.sendMessage(message);
             }
             prev_health = this.bot.health;
         });
-        // Logging callbacks
-        this.bot.on('error' , (err) => {
-            console.error('Error event!', err);
-        });
-        this.bot.on('end', (reason) => {
-            console.warn('Bot disconnected! Killing agent process.', reason)
-            this.cleanKill('Bot disconnected! Killing agent process.');
-        });
+
         this.bot.on('death', () => {
+            const message = createBridgeMessage('died', 'death', { 
+               position: this.bot.entity.position, dimension: this.bot.game.dimension 
+            });
+
+            this.connectBridgeServer.sendMessage(message);
             this.actions.cancelResume();
             this.actions.stop();
         });
+
         this.bot.on('kicked', (reason) => {
-            console.warn('Bot kicked!', reason);
+            const message = createBridgeMessage(`Bot kicked : ${reason}`, 'kicked');
+            this.connectBridgeServer.sendMessage(message);
             this.cleanKill('Bot kicked! Killing agent process.');
         });
+
         this.bot.on('messagestr', async (message, _, jsonMsg) => {
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
                 console.log('Agent died: ', message);
@@ -416,12 +433,78 @@ export class Agent {
                 this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
             }
         });
+
         this.bot.on('idle', () => {
+            const message = createBridgeMessage('Bot idle', 'idle');
+            this.connectBridgeServer.sendMessage(message);
             this.bot.clearControlStates();
             this.bot.pathfinder.stop(); // clear any lingering pathfinder
             this.bot.modes.unPauseAll();
             this.actions.resumeAction();
         });
+
+        const monitoredModes = ['self_defense', 'hunting', 'cowardice']; 
+        let lastActiveMode = null; 
+        let lastMessageTimestamp = 0; 
+        const MESSAGE_GAP = 15000; // 15 seconds
+
+        setInterval(() => {
+            const currentTime = Date.now();
+
+            for (const mode of monitoredModes) {
+                if (this.bot.modes.isOn(mode)) {
+                    if (lastActiveMode !== mode && currentTime - lastMessageTimestamp >= MESSAGE_GAP) {
+                        let reason = `Mode active: ${mode}`;
+                        let eventData = { timestamp: currentTime };
+
+                        if (mode === 'self_defense') {
+                            const enemy = world.getNearestEntityWhere(this.bot, entity => mc.isHostile(entity), 8);
+                            if (enemy) {
+                                reason = `Fighting ${enemy.name}`;
+                                eventData.enemy = enemy.name;
+                                eventData.enemyPosition = {
+                                    x: enemy.position.x.toFixed(2),
+                                    y: enemy.position.y.toFixed(2),
+                                    z: enemy.position.z.toFixed(2),
+                                };
+                            }
+                        } else if (mode === 'hunting') {
+                            const huntable = world.getNearestEntityWhere(this.bot, entity => mc.isHuntable(entity), 8);
+                            if (huntable) {
+                                reason = `Hunting ${huntable.name}`;
+                                eventData.target = huntable.name;
+                                eventData.targetPosition = {
+                                    x: huntable.position.x.toFixed(2),
+                                    y: huntable.position.y.toFixed(2),
+                                    z: huntable.position.z.toFixed(2),
+                                };
+                            }
+                        } else if (mode === 'cowardice') {
+                            const enemy = world.getNearestEntityWhere(this.bot, entity => mc.isHostile(entity), 16);
+                            if (enemy) {
+                                reason = `Running away from ${enemy.name}`;
+                                eventData.enemy = enemy.name;
+                                eventData.enemyPosition = {
+                                    x: enemy.position.x.toFixed(2),
+                                    y: enemy.position.y.toFixed(2),
+                                    z: enemy.position.z.toFixed(2),
+                                };
+                            } 
+                        }
+
+                        if (eventData.enemy || eventData.target) {
+                            const message = createBridgeMessage(reason, mode, eventData);
+                            this.connectBridgeServer.sendMessage(message);
+
+                            lastActiveMode = mode; 
+                            lastMessageTimestamp = currentTime; 
+                        }
+                    }
+                    return; 
+                }
+            }
+            lastActiveMode = null;
+        }, 1000);
 
         // Init NPC controller
         this.npc.init();

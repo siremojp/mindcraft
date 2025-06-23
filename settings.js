@@ -3,6 +3,9 @@ const settings = {
     "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
     "port": 55916,
     "auth": "offline", // or "microsoft"
+    //minecraft bridge server URL
+    "minecraft_bridge_server_url": "ws://localhost", 
+    "minecraft_bridge_server_port": 3000, 
 
     // the mindserver manages all agents and hosts the UI
     "host_mindserver": true, // if true, the mindserver will be hosted on this machine. otherwise, specify a public IP address
