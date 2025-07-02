@@ -394,10 +394,10 @@ export class Agent {
         this.bot.lastDamageTaken = 0;
         this.bot.on('health', () => {
             const healthChange = prev_health - this.bot.health;
-            const MAJOR_HEALTH_DECREASE = 20; // Define what constitutes a major decrease
-            if (healthChange >= MAJOR_HEALTH_DECREASE) {
-            const message = createBridgeMessage('Major health decrease', 'health', {
-                 health: this.bot.health, damageTaken: healthChange 
+            if (healthChange > 0) { 
+            const message = createBridgeMessage('Health decrease', 'health', {
+                health: this.bot.health,
+                damageTaken: healthChange
             });
             this.connectBridgeServer.sendMessage(message);
             }
