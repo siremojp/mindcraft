@@ -1,4 +1,5 @@
 import { Agent } from '../agent/agent.js';
+import { connectBridgeServer } from './connect_bridge_server.js';
 import yargs from 'yargs';
 
 // Add global unhandled rejection handler
@@ -55,7 +56,8 @@ const argv = yargs(args)
     try {
         console.log('Starting agent with profile:', argv.profile);
         const agent = new Agent();
-        await agent.start(argv.profile, argv.load_memory, argv.init_message, argv.count_id, argv.task_path, argv.task_id);
+        await connectBridgeServer.connect(agent);
+        await agent.start(argv.profile, argv.load_memory, argv.init_message, argv.count_id, argv.task_path, argv.task_id, connectBridgeServer);
     } catch (error) {
         console.error('Failed to start agent process:');
         console.error(error.message);
