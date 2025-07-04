@@ -1,6 +1,6 @@
 {
     "name": "Ima-chan(Proto)",
 
-    "model": "ollama/qwen2.5:14B"
+    "model": "gpt-4.1-mini"
 
 }
